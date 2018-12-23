@@ -1,0 +1,51 @@
+fib();
+func3();
+func2();
+ptr_test();
+
+/*
+main1()
+{
+	return fib(34);
+}
+
+fib(n)
+{
+	if(n<2) {
+		return n;
+	} else {
+		return fib(n-1) + fib(n-2);
+	}
+}
+
+main2() {
+	var i=0;
+	if( i==0 ) {
+		var n = func3(1, 2, 3);
+		i += n;
+	}
+	return i;
+}
+
+func3(x, y, z)
+{
+	return x * y + z;
+}
+
+func2(i)
+{
+	return 1;
+}
+*/
+
+main()
+{
+	var i = 5, x = 6, p=&x;
+	ptr_test(&p);
+	return x - i;
+}
+
+ptr_test(ref)
+{
+	**ref += 2;
+}
