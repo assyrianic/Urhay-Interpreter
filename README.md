@@ -37,3 +37,4 @@ func3(x, y, z)
 * Basic logical ops like `&& ||`
 * Basic comparison ops like `!= == < >`.
 * Basic variables which are untyped and can be used with both integer and pointer operations alike.
+* Ignores C++ style `//` and C style `/*  */` comments.
