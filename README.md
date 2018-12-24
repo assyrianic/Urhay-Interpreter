@@ -3,26 +3,14 @@ a small, educational AST interpreter that implements a C-like language.
 
 ## Example Code:
 ```javascript
-fib();
-func3();
-
-main1()
+main()
 {
 	return fib(34);
 }
 
 fib(n)
 {
-	if(n<2) {
-		return n;
-	} else {
-		return fib(n-1) + fib(n-2);
-	}
-}
-
-func3(x, y, z)
-{
-	return x * y + z;
+	return (n<2) ? n : fib(n-1) + fib(n-2);
 }
 ```
 
