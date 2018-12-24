@@ -5,7 +5,6 @@
 
 
 int64_t urhay_walk(struct UrhayInterp *, struct UrhayNode *, struct HarbolLinkMap *, struct HarbolLinkMap *, size_t, bool *);
-//struct UrhayType *urhay_walk(struct UrhayInterp *, struct UrhayNode *, struct HarbolLinkMap *, struct HarbolLinkMap *, size_t, bool *);
 struct HarbolLinkMap *urhay_setup_func_params(struct UrhayInterp *, struct HarbolLinkMap *, struct HarbolLinkMap *);
 
 FILE *g_debug_print;
@@ -17,12 +16,23 @@ bool urhay_var_free(void *v)
 	return true;
 }
 
+
 void urhay_ast_print(const struct UrhayNode *const node)
 {
 	if( !node )
 		return;
 	
 	switch( node->NodeTag ) {
+		case ASTModule: {
+			puts("\nAST Module Start");
+			puts("AST Module Funcs");
+			const union HarbolValue *const end = harbol_linkmap_get_iter_end_count(node->Module);
+			for( const union HarbolValue *iter = harbol_linkmap_get_iter(node->Module) ; iter && iter<end ; iter++ ) {
+				urhay_ast_print(iter->KvPairPtr->Data.Ptr);
+			}
+			puts("AST Module End\n");
+			break;
+		}
 		case ASTFuncDecl: {
 			puts("\nAST Func Decl Start");
 			printf("AST Func Name '%s'\n", node->FuncName.CStr);
@@ -99,91 +109,91 @@ void urhay_ast_print(const struct UrhayNode *const node)
 			break;
 		}
 		case ASTLogicalOr: {
-			puts("AST Logical Or Expr Start");
-			puts("AST Logical Or Expr Left");
+			puts("AST || Expr Start");
+			puts("AST || Expr Left");
 			urhay_ast_print(node->BinaryLeft);
-			puts("AST Logical Or Expr Right");
+			puts("AST || Expr Right");
 			urhay_ast_print(node->BinaryRight);
-			puts("AST Logical Or Expr End");
+			puts("AST || Expr End");
 			break;
 		}
 		case ASTLogicalAnd: {
-			puts("AST Logical And Expr Start");
-			puts("AST Logical And Expr Left");
+			puts("AST && Expr Start");
+			puts("AST && Expr Left");
 			urhay_ast_print(node->BinaryLeft);
-			puts("AST Logical And Expr Right");
+			puts("AST && Expr Right");
 			urhay_ast_print(node->BinaryRight);
-			puts("AST Logical And Expr End");
+			puts("AST && Expr End");
 			break;
 		}
 		case ASTBitOr: {
-			puts("AST Bitwise Or Expr Start");
-			puts("AST Bitwise Or Expr Left");
+			puts("AST | Expr Start");
+			puts("AST | Expr Left");
 			urhay_ast_print(node->BinaryLeft);
-			puts("AST Bitwise Or Expr Right");
+			puts("AST | Expr Right");
 			urhay_ast_print(node->BinaryRight);
-			puts("AST Bitwise Or Expr End");
+			puts("AST | Expr End");
 			break;
 		}
 		case ASTBitXor: {
-			puts("AST Bitwise Xor Expr Start");
-			puts("AST Bitwise Xor Expr Left");
+			puts("AST ^ Expr Start");
+			puts("AST ^ Expr Left");
 			urhay_ast_print(node->BinaryLeft);
-			puts("AST Bitwise Xor Expr Right");
+			puts("AST ^ Expr Right");
 			urhay_ast_print(node->BinaryRight);
-			puts("AST Bitwise Xor Expr End");
+			puts("AST ^ Expr End");
 			break;
 		}
 		case ASTBitAnd: {
-			puts("AST Bitwise And Expr Start");
-			puts("AST Bitwise And Expr Left");
+			puts("AST & Expr Start");
+			puts("AST & Expr Left");
 			urhay_ast_print(node->BinaryLeft);
-			puts("AST Bitwise And Expr Right");
+			puts("AST & Expr Right");
 			urhay_ast_print(node->BinaryRight);
-			puts("AST Bitwise And Expr End");
+			puts("AST & Expr End");
 			break;
 		}
 		case ASTNotEqual: {
-			puts("AST UnEquality Expr Start");
-			puts("AST UnEquality Expr Left");
+			puts("AST != Expr Start");
+			puts("AST != Expr Left");
 			urhay_ast_print(node->BinaryLeft);
-			puts("AST UnEquality Expr Right");
+			puts("AST != Expr Right");
 			urhay_ast_print(node->BinaryRight);
-			puts("AST UnEquality Expr End");
+			puts("AST != Expr End");
 			break;
 		}
 		case ASTEqual: {
-			puts("AST Equality Expr Start");
-			puts("AST Equality Expr Left");
+			puts("AST == Expr Start");
+			puts("AST == Expr Left");
 			urhay_ast_print(node->BinaryLeft);
-			puts("AST Equality Expr Right");
+			puts("AST == Expr Right");
 			urhay_ast_print(node->BinaryRight);
-			puts("AST Equality Expr End");
+			puts("AST == Expr End");
 			break;
 		}
 		case ASTAdd: {
-			puts("AST Add Expr Start");
-			puts("AST Add Expr Left");
+			puts("AST + Expr Start");
+			puts("AST + Expr Left");
 			urhay_ast_print(node->BinaryLeft);
-			puts("AST Add Expr Right");
+			puts("AST + Expr Right");
 			urhay_ast_print(node->BinaryRight);
-			puts("AST Add Expr End");
+			puts("AST + Expr End");
 			break;
 		}
 		case ASTSub: {
-			puts("AST Sub Expr Start");
-			puts("AST Sub Expr Left");
+			puts("AST - Expr Start");
+			puts("AST - Expr Left");
 			urhay_ast_print(node->BinaryLeft);
-			puts("AST Sub Expr Right");
+			puts("AST - Expr Right");
 			urhay_ast_print(node->BinaryRight);
-			puts("AST Sub Expr End");
+			puts("AST - Expr End");
 			break;
 		}
 		case ASTMul: {
-			puts("AST Mul Expr Start");
-			puts("AST Mul Expr Left");
+			puts("AST * Expr Start");
+			puts("AST * Expr Left");
 			urhay_ast_print(node->BinaryLeft);
-			puts("AST Mul Expr Right");
+			puts("AST * Expr Right");
 			urhay_ast_print(node->BinaryRight);
 			puts("AST Mul Expr End");
 			break;
@@ -211,15 +221,29 @@ void urhay_ast_print(const struct UrhayNode *const node)
 			break;
 		}
 		case ASTRef: {
-			puts("AST Reference Expr Start");
-			urhay_ast_print(node->PtrOp);
-			puts("AST Reference Expr End");
+			puts("AST &i Expr Start");
+			urhay_ast_print(node->Unary);
+			puts("AST &i Expr End");
 			break;
 		}
 		case ASTDeref: {
-			puts("AST Deref Expr Start");
-			urhay_ast_print(node->PtrOp);
-			puts("AST Deref Expr End");
+			puts("AST @p Expr Start");
+			urhay_ast_print(node->Unary);
+			puts("AST @p Expr End");
+			break;
+		}
+		case ASTBitShiftLeft: {
+			puts("AST << Expr Start");
+			urhay_ast_print(node->BinaryLeft);
+			urhay_ast_print(node->BinaryRight);
+			puts("AST << Expr End");
+			break;
+		}
+		case ASTBitShiftRight: {
+			puts("AST >> Expr Start");
+			urhay_ast_print(node->BinaryLeft);
+			urhay_ast_print(node->BinaryRight);
+			puts("AST >> Expr End");
 			break;
 		}
 		case ASTInvalid:
@@ -228,17 +252,21 @@ void urhay_ast_print(const struct UrhayNode *const node)
 	}
 }
 
-int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const node, struct HarbolLinkMap *const params, struct HarbolLinkMap *const localvars, const size_t scope, bool *const do_ret)
+int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const node, struct HarbolLinkMap *const restrict params, struct HarbolLinkMap *const restrict localvars, const size_t scope, bool *const do_ret)
 {
 	if( !node )
 		return 0;
 	//fprintf(g_debug_print, "do_ret valid?: '%s' | do_ret value: '%u'\n", do_ret ? "yes" : "no", do_ret ? *do_ret : 0xff);
 	switch( node->NodeTag ) {
-		case ASTIntLit:
+		case ASTIntLit: {
 			//fprintf(g_debug_print, "ASTIntLit '%" PRIi64 "'\n", node->I64Lit);
 			return node->I64Lit;
+		}
 		case ASTVar: {
-			struct UrhayVar *const v = harbol_linkmap_has_key(params, node->Iden.CStr) ? harbol_linkmap_get(params, node->Iden.CStr).Ptr : harbol_linkmap_get(localvars, node->Iden.CStr).Ptr;
+			//if( node->Type==TypeFunc )
+			struct UrhayVar *const v = harbol_linkmap_has_key(params, node->Iden.CStr)
+				? harbol_linkmap_get(params, node->Iden.CStr).Ptr
+				: harbol_linkmap_get(localvars, node->Iden.CStr).Ptr;
 			if( !v ) {
 				printf("Urhay Interpreter Error: **** ASTVar: undefined variable '%s'! ****\n", node->Iden.CStr);
 				exit(-1);
@@ -246,7 +274,7 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 				printf("Urhay Interpreter Error: **** ASTVar: variable '%s' is out of scope! ****\n", node->Iden.CStr);
 				exit(-1);
 			}
-			//fprintf(g_debug_print, "ASTVar '%s': '%" PRIi64 "'\n", node->Iden.CStr, v->I64);
+			//fprintf(g_debug_print, "ASTVar '%s': '%p'\n", node->Iden.CStr, v);
 			return v->I64;
 		}
 		case ASTMul: {
@@ -262,6 +290,14 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 			//fputs("ASTAdd\n", g_debug_print);
 			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) + urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
 		}
+		case ASTBitShiftLeft: {
+			//fputs("ASTAdd\n", g_debug_print);
+			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) << urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+		}
+		case ASTBitShiftRight: {
+			//fputs("ASTAdd\n", g_debug_print);
+			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) >> urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+		}
 		case ASTLessThan: {
 			//fputs("ASTLessThan\n", g_debug_print);
 			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) < urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
@@ -269,6 +305,14 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 		case ASTGreaterThan: {
 			//fputs("ASTGreaterThan\n", g_debug_print);
 			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) > urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+		}
+		case ASTLessEq: {
+			//fputs("ASTLessEq\n", g_debug_print);
+			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) <= urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+		}
+		case ASTGreaterEq: {
+			//fputs("ASTGreaterEq\n", g_debug_print);
+			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) >= urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
 		}
 		case ASTEqual: {
 			//fputs("ASTEqual\n", g_debug_print);
@@ -298,6 +342,22 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 			//fputs("ASTLogicalOr\n", g_debug_print);
 			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) || urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
 		}
+		case ASTNot: {
+			//fputs("ASTNot\n", g_debug_print);
+			return !urhay_walk(interp, node->Unary, params, localvars, scope, do_ret);
+		}
+		case ASTUnaryPlus: {
+			//fputs("ASTUnaryPlus\n", g_debug_print);
+			return +urhay_walk(interp, node->Unary, params, localvars, scope, do_ret);
+		}
+		case ASTUnaryMinus: {
+			//fputs("ASTUnaryMinus\n", g_debug_print);
+			return -urhay_walk(interp, node->Unary, params, localvars, scope, do_ret);
+		}
+		case ASTBitNot: {
+			//fputs("ASTBitNot\n", g_debug_print);
+			return ~urhay_walk(interp, node->Unary, params, localvars, scope, do_ret);
+		}
 		case ASTTernaryOp: {
 			//fputs("ASTTernaryOp\n", g_debug_print);
 			return urhay_walk(interp, node->Cond, params, localvars, scope, do_ret)
@@ -310,7 +370,7 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 			struct UrhayNode *const varnode = node->BinaryLeft;
 			
 			if( tag==ASTVar ) {
-				struct UrhayVar *const v = (harbol_linkmap_has_key(params, varnode->Iden.CStr) ? harbol_linkmap_get(params, varnode->Iden.CStr).Ptr : harbol_linkmap_get(localvars, varnode->Iden.CStr).Ptr);
+				struct UrhayVar *const v = harbol_linkmap_has_key(params, varnode->Iden.CStr) ? harbol_linkmap_get(params, varnode->Iden.CStr).Ptr : harbol_linkmap_get(localvars, varnode->Iden.CStr).Ptr;
 				if( !v ) {
 					printf("Urhay Interpreter Error: **** ASTAssign: undefined variable '%s'! ****\n", node->BinaryLeft->Iden.CStr);
 					exit(-1);
@@ -321,7 +381,7 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 				v->I64 = urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
 				return v->I64;
 			} else if( tag==ASTDeref ) {
-				const int64_t iptr = urhay_walk(interp, varnode->PtrOp, params, localvars, scope, do_ret);
+				const int64_t iptr = urhay_walk(interp, varnode->Unary, params, localvars, scope, do_ret);
 				struct UrhayVar *const v = (struct UrhayVar *)(intptr_t)iptr;
 				v->I64 = urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
 				return v->I64;
@@ -332,7 +392,7 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 		case ASTFuncCall: {
 			//fputs("ASTFuncCall\n", g_debug_print);
 			if( node->Caller->NodeTag != ASTVar ) {
-				puts("Urhay Interpreter Error: **** ASTFuncCall: cannot call a function except by name! ****\n");
+				puts("Urhay Interpreter Error: **** ASTFuncCall: cannot call a function except by name or reference! ****\n");
 				exit(-1);
 			}
 			struct UrhayNode *func_node = harbol_linkmap_get(&interp->SymTable, node->Caller->Iden.CStr).Ptr;
@@ -351,7 +411,7 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 					continue;
 				v->I64 = urhay_walk(interp, arg_expr, params, localvars, scope, do_ret);
 				args_given++;
-				//fprintf(g_debug_print, "call arg %zu: '%" PRIi64 "'\n", i, v->I64);
+				//fprintf(g_debug_print, "call arg %zu: '0x%" PRIx64 "'\n", i, v->I64);
 			}
 			if( args_given < harbol_linkmap_get_count(func_node->Params) ) {
 				printf("Urhay Interpreter Error: **** ASTFuncCall: Not enough params to call '%s' ****\n", node->Caller->Iden.CStr);
@@ -422,11 +482,11 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 		}
 		case ASTRef: {
 			//fputs("ASTRef\n", g_debug_print);
-			if( node->PtrOp && node->PtrOp->NodeTag != ASTVar ) {
+			if( node->Unary && node->Unary->NodeTag != ASTVar ) {
 				puts("Urhay Interpreter Error: **** ASTRef: cannot give reference from non-var. ****");
 				exit(-1);
 			}
-			struct UrhayNode *varnode = node->PtrOp;
+			struct UrhayNode *varnode = node->Unary;
 			struct UrhayVar *const v = harbol_linkmap_has_key(params, varnode->Iden.CStr) ? harbol_linkmap_get(params, varnode->Iden.CStr).Ptr : harbol_linkmap_get(localvars, varnode->Iden.CStr).Ptr;
 			if( !v ) {
 				printf("Urhay Interpreter Error: **** ASTRef: undefined variable '%s'! ****\n", varnode->Iden.CStr);
@@ -437,19 +497,29 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 		}
 		case ASTDeref: {
 			//fputs("ASTDeref\n", g_debug_print);
-			if( node->PtrOp && !(node->PtrOp->NodeTag == ASTVar || node->PtrOp->NodeTag == ASTDeref) ) {
+			if( node->Unary && !(node->Unary->NodeTag == ASTVar || node->Unary->NodeTag == ASTDeref || node->Unary->NodeTag == ASTRef) ) {
 				puts("Urhay Interpreter Error: **** ASTDeref: cannot de-reference non-var. ****");
 				exit(-1);
 			}
-			const int64_t iptr = urhay_walk(interp, node->PtrOp, params, localvars, scope, do_ret);
-			struct UrhayVar *const v = (struct UrhayVar *)(intptr_t)iptr;
 			
+			struct UrhayVar *const v = (struct UrhayVar *)(intptr_t)urhay_walk(interp, node->Unary, params, localvars, scope, do_ret);
 			if( !v ) {
 				puts("Urhay Interpreter Error: **** ASTDeref: NULL ptr exception! ****");
 				exit(-1);
 			}
 			//printf("deref %p\n", v);
 			return v->I64;
+		}
+		case ASTModule: {
+			//fputs("ASTModule\n", g_debug_print);
+			struct UrhayNode *main_node = harbol_linkmap_get(node->Module, "main").Ptr;
+			main_node->LocalVars = harbol_linkmap_new();
+			bool ret = false;
+			struct HarbolLinkMap *main_params = urhay_setup_func_params(interp, main_node->Params, main_node->LocalVars);
+			const int64_t result = urhay_walk(interp, main_node->FuncBody, main_params, main_node->LocalVars, 0, &ret);
+			harbol_linkmap_free(&main_params, urhay_var_free);
+			harbol_linkmap_free(&main_node->LocalVars, urhay_var_free);
+			return result;
 		}
 		default: return 0;
 	}
@@ -469,23 +539,23 @@ struct HarbolLinkMap *urhay_setup_func_params(struct UrhayInterp *const interp, 
 	return param_args;
 }
 
-bool urhay_interp(struct UrhayInterp *const interp)
+bool urhay_interpret(struct UrhayInterp *const interp)
 {
-	if( !interp )
+	if( !interp || !interp->ModuleNode )
 		return false;
-	
-	bool ret = false;
-	struct UrhayNode *node = harbol_linkmap_get(&interp->SymTable, "main").Ptr;
+	/*
 	g_debug_print = fopen("urhay_debug_print.txt", "w+");
 	if( !g_debug_print )
 		return false;
+	*/
+	const union HarbolValue *const end = harbol_linkmap_get_iter_end_count(interp->ModuleNode->Module);
+	for( const union HarbolValue *iter = harbol_linkmap_get_iter(interp->ModuleNode->Module) ; iter && iter<end ; iter++ ) {
+		struct UrhayNode *const func = iter->KvPairPtr->Data.Ptr;
+		harbol_linkmap_insert(&interp->SymTable, func->FuncName.CStr, (union HarbolValue){ .Ptr=func });
+	}
 	
-	node->LocalVars = harbol_linkmap_new();
-	struct HarbolLinkMap *main_params = urhay_setup_func_params(interp, node->Params, node->LocalVars);
-	const int64_t result = urhay_walk(interp, node->FuncBody, main_params, node->LocalVars, 0, &ret);
-	harbol_linkmap_free(&main_params, urhay_var_free);
-	harbol_linkmap_free(&node->LocalVars, urhay_var_free);
+	const int64_t result = urhay_walk(interp, interp->ModuleNode, NULL, NULL, 0, NULL);
 	printf("final result == %" PRIi64 "\n", result);
-	fclose(g_debug_print), g_debug_print=NULL;
+	//fclose(g_debug_print), g_debug_print=NULL;
 	return (bool)result;
 }

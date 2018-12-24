@@ -93,9 +93,8 @@ ASTFunction
 	urhay_parse_shift_expr, urhay_parse_add_expr, urhay_parse_mul_expr, urhay_parse_cast_expr, urhay_parse_unary_expr, urhay_parse_postfix_expr, urhay_parse_primary_expr
 ;
 
-
 // module = (<function> | <func_decl>)* ;
-struct HarbolLinkMap *urhay_parse_module(struct UrhayInterp *const lexer)
+struct UrhayNode *urhay_parse_module(struct UrhayInterp *const lexer)
 {
 	if( !lexer )
 		return NULL;
@@ -106,12 +105,32 @@ struct HarbolLinkMap *urhay_parse_module(struct UrhayInterp *const lexer)
 	harbol_linkmap_insert(&lexer->KeyWords, "else", (union HarbolValue){0});
 	harbol_linkmap_insert(&lexer->KeyWords, "for", (union HarbolValue){0});
 	harbol_linkmap_insert(&lexer->KeyWords, "return", (union HarbolValue){0});
+	harbol_linkmap_insert(&lexer->KeyWords, "hook", (union HarbolValue){0});
+	
+	// setup module node.
+	struct UrhayNode *node = calloc(1, sizeof *node);
+	node->NodeTag = ASTModule;
+	node->Module = harbol_linkmap_new();
 	
 	// advance lexer to function identifier.
 	urhay_lexer_get_token(lexer);
 	while( lexer->CurrToken != TokenInvalid ) {
-		//urhay_ast_print(urhay_parse_function(lexer));
-		urhay_parse_function(lexer);
+		struct UrhayNode *func = urhay_parse_function(lexer);
+		urhay_ast_print(func);
+		const bool exists = harbol_linkmap_has_key(node->Module, func->FuncName.CStr);
+		
+		/* if our function doesn't exist in the symbol table, put it in regardless if func's body is defined. */
+		if( !exists ) {
+			harbol_linkmap_insert(node->Module, func->FuncName.CStr, (union HarbolValue){ .Ptr=func });
+		}
+		/* if we already have the entry but the funcbody is now defined, overwrite. */
+		else if( exists && func->FuncBody ) {
+			struct UrhayNode *check = harbol_linkmap_get(node->Module, func->FuncName.CStr).Ptr;
+			if( check && check->FuncBody ) {
+				urhay_err_out(lexer, "redefinition of function '%s'", func->FuncName.CStr);
+			}
+			else harbol_linkmap_set(node->Module, func->FuncName.CStr, (union HarbolValue){ .Ptr=func });
+		}
 	}
 	/*
 	const HarbolValue *const end = harbol_linkmap_get_iter_end_count(&lexer->SymTable);
@@ -119,7 +138,7 @@ struct HarbolLinkMap *urhay_parse_module(struct UrhayInterp *const lexer)
 		printf("function name: '%s'\n", iter->KvPairPtr->KeyName.CStr);
 	}
 	*/
-	return &lexer->SymTable;
+	return node;
 }
 
 // function = <id> '(' <id>* ([',' <id>])* ')' <statement> ;
@@ -133,9 +152,6 @@ struct UrhayNode *urhay_parse_function(struct UrhayInterp *const lexer)
 	struct UrhayNode *node = calloc(1, sizeof *node);
 	node->NodeTag = ASTFuncDecl;
 	harbol_string_copy_str(&node->FuncName, &lexer->Lexeme);
-	
-	union HarbolValue sym_entry = (union HarbolValue){0};
-	harbol_linkmap_insert(&lexer->SymTable, node->FuncName.CStr, sym_entry);
 	const enum UrhayToken *const token = &lexer->CurrToken;
 	
 	// advance laxer and assert we have a left (
@@ -151,12 +167,11 @@ struct UrhayNode *urhay_parse_function(struct UrhayInterp *const lexer)
 	_parse_expect(lexer, TokenRightParen);
 	urhay_lexer_get_token(lexer);
 	
-	if( *token != TokenSemicolon )
+	if( *token != TokenSemicolon ) {
 		node->FuncBody = urhay_parse_compound_stmt(lexer);
-	else urhay_lexer_get_token(lexer);
-	
-	sym_entry.Ptr = node;
-	harbol_linkmap_set(&lexer->SymTable, node->FuncName.CStr, sym_entry);
+	} else {
+		urhay_lexer_get_token(lexer);
+	}
 	return node;
 }
 
@@ -195,7 +210,7 @@ struct UrhayNode *urhay_parse_statement(struct UrhayInterp *const lexer)
 		case TokenFor:				return urhay_parse_iter_stmt(lexer);
 		case TokenReturn:			return urhay_parse_ret_stmt(lexer);
 		case TokenVar:				return urhay_parse_var_decl(lexer);
-		case TokenElse: urhay_err_out(lexer, "'else' without preceding 'if' stmt!");
+		case TokenElse: urhay_err_out(lexer, "lone 'else' without 'if' stmt!");
 		default:					return urhay_parse_main_expr(lexer);
 	}
 }
@@ -224,10 +239,10 @@ struct UrhayNode *urhay_parse_if_stmt(struct UrhayInterp *const lexer)
 	_parse_expect(lexer, TokenRightParen);
 	urhay_lexer_get_token(lexer);
 	
-	node->Then = urhay_parse_compound_stmt(lexer);
+	node->Then = urhay_parse_statement(lexer);
 	if( *token==TokenElse ) {
 		urhay_lexer_get_token(lexer);
-		node->Else = urhay_parse_compound_stmt(lexer);
+		node->Else = urhay_parse_statement(lexer);
 	}
 	return node;
 }
@@ -256,7 +271,7 @@ struct UrhayNode *urhay_parse_iter_stmt(struct UrhayInterp *const lexer)
 	_parse_expect(lexer, TokenRightParen);
 	urhay_lexer_get_token(lexer);
 	
-	node->LoopStmt = urhay_parse_compound_stmt(lexer);
+	node->LoopStmt = urhay_parse_statement(lexer);
 	return node;
 }
 
@@ -384,7 +399,7 @@ struct UrhayNode *urhay_parse_assign_expr(struct UrhayInterp *const lexer)
 		urhay_lexer_get_token(lexer);
 		tern->Else = urhay_parse_conditional_expr(lexer);
 		return tern;
-	} else if( *token==TokenAssign || *token==TokenAddAssign || *token==TokenSubAssign ) {
+	} else if( *token==TokenAssign || *token==TokenAddAssign || *token==TokenSubAssign || *token==TokenMulAssign ) {
 		const enum UrhayToken assigner = *token;
 		const bool compound_assign = assigner != TokenAssign;
 		urhay_lexer_get_token(lexer);
@@ -397,7 +412,7 @@ struct UrhayNode *urhay_parse_assign_expr(struct UrhayInterp *const lexer)
 		struct UrhayNode *value = urhay_parse_assign_expr(lexer);
 		if( compound_assign ) {
 			struct UrhayNode *binary = calloc(1, sizeof *binary);
-			binary->NodeTag = assigner==TokenAddAssign ? ASTAdd : assigner==TokenSubAssign ? ASTSub : ASTInvalid;
+			binary->NodeTag = assigner==TokenAddAssign ? ASTAdd : assigner==TokenSubAssign ? ASTSub : assigner==TokenMulAssign ? ASTMul : ASTInvalid;
 			binary->BinaryLeft = node;
 			binary->BinaryRight = value;
 			right = binary;
@@ -572,6 +587,20 @@ struct UrhayNode *urhay_parse_relational_expr(struct UrhayInterp *const lexer)
 		bin->BinaryLeft = node;
 		bin->BinaryRight = urhay_parse_relational_expr(lexer);
 		return bin;
+	} else if( *token==TokenLessEq ) {
+		urhay_lexer_get_token(lexer);
+		struct UrhayNode *bin = calloc(1, sizeof *bin);
+		bin->NodeTag = ASTLessEq;
+		bin->BinaryLeft = node;
+		bin->BinaryRight = urhay_parse_relational_expr(lexer);
+		return bin;
+	} else if( *token==TokenGreaterEq ) {
+		urhay_lexer_get_token(lexer);
+		struct UrhayNode *bin = calloc(1, sizeof *bin);
+		bin->NodeTag = ASTGreaterEq;
+		bin->BinaryLeft = node;
+		bin->BinaryRight = urhay_parse_relational_expr(lexer);
+		return bin;
 	}
 	return node;
 }
@@ -582,8 +611,16 @@ struct UrhayNode *urhay_parse_shift_expr(struct UrhayInterp *const lexer)
 	if( !lexer )
 		return NULL;
 	
-	//const enum UrhayToken *const token = &lexer->CurrToken;
+	const enum UrhayToken *const token = &lexer->CurrToken;
 	struct UrhayNode *node = urhay_parse_add_expr(lexer);
+	if( *token==TokenLeftSh || *token==TokenRightSh ) {
+		struct UrhayNode *bin = calloc(1, sizeof *bin);
+		bin->NodeTag = *token==TokenLeftSh ? ASTBitShiftLeft : *token==TokenRightSh ? ASTBitShiftRight : ASTInvalid;
+		urhay_lexer_get_token(lexer);
+		bin->BinaryLeft = node;
+		bin->BinaryRight = urhay_parse_relational_expr(lexer);
+		return bin;
+	}
 	return node;
 }
 
@@ -644,7 +681,7 @@ struct UrhayNode *urhay_parse_cast_expr(struct UrhayInterp *const lexer)
 }
 
 // unary_exp = <postfix_exp> | <unary_operator> <cast_exp> | 'sizeof' ['('] <unary_exp> [')'] | ;
-// unary_operator = '&' | '*' | '+' | '-' | '~' | '!' ;
+// unary_operator = '&' | '@' | '+' | '-' | '~' | '!' ;
 struct UrhayNode *urhay_parse_unary_expr(struct UrhayInterp *const lexer)
 {
 	if( !lexer )
@@ -652,20 +689,43 @@ struct UrhayNode *urhay_parse_unary_expr(struct UrhayInterp *const lexer)
 	
 	const enum UrhayToken *const token = &lexer->CurrToken;
 	// add code for sizeof and alignof
-	if( *token==TokenStar ) {
+	if( *token==TokenAt ) {
 		urhay_lexer_get_token(lexer);
 		struct UrhayNode *node = calloc(1, sizeof *node);
 		node->NodeTag = ASTDeref;
-		node->PtrOp = urhay_parse_cast_expr(lexer);
+		node->Unary = urhay_parse_cast_expr(lexer);
 		return node;
 	} else if( *token==TokenAmpersand ) {
 		urhay_lexer_get_token(lexer);
 		struct UrhayNode *node = calloc(1, sizeof *node);
 		node->NodeTag = ASTRef;
-		node->PtrOp = urhay_parse_cast_expr(lexer);
+		node->Unary = urhay_parse_cast_expr(lexer);
+		return node;
+	} else if( *token==TokenUnaryNot ) {
+		urhay_lexer_get_token(lexer);
+		struct UrhayNode *node = calloc(1, sizeof *node);
+		node->NodeTag = ASTNot;
+		node->Unary = urhay_parse_cast_expr(lexer);
+		return node;
+	} else if( *token==TokenAdd ) {
+		urhay_lexer_get_token(lexer);
+		struct UrhayNode *node = calloc(1, sizeof *node);
+		node->NodeTag = ASTUnaryPlus;
+		node->Unary = urhay_parse_cast_expr(lexer);
+		return node;
+	} else if( *token==TokenSub ) {
+		urhay_lexer_get_token(lexer);
+		struct UrhayNode *node = calloc(1, sizeof *node);
+		node->NodeTag = ASTUnaryMinus;
+		node->Unary = urhay_parse_cast_expr(lexer);
+		return node;
+	} else if( *token==TokenCompl ) {
+		urhay_lexer_get_token(lexer);
+		struct UrhayNode *node = calloc(1, sizeof *node);
+		node->NodeTag = ASTBitNot;
+		node->Unary = urhay_parse_cast_expr(lexer);
 		return node;
 	}
-	/* || *token==TokenAdd || *token==TokenSub || *token==TokenUnaryNot */
 	return urhay_parse_postfix_expr(lexer);
 }
 
@@ -738,4 +798,13 @@ struct UrhayNode *urhay_parse_primary_expr(struct UrhayInterp *const lexer)
 		return node;
 	}
 	return NULL;
+}
+
+
+bool urhay_parse_file(struct UrhayInterp *const lexer)
+{
+	if( !lexer )
+		return false;
+	lexer->ModuleNode = urhay_parse_module(lexer);
+	return lexer->ModuleNode != NULL;
 }

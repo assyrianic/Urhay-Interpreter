@@ -319,9 +319,21 @@ enum UrhayToken urhay_lexer_get_token(struct UrhayInterp *const lexer)
 					}
 				}
 				case '*': {
-					harbol_string_copy_cstr(lexeme, "*");
-					lexer->CurrToken = TokenStar;
-					return TokenStar;
+					if( *lexer->Iter=='=' ) {
+						harbol_string_copy_cstr(lexeme, "*=");
+						lexer->Iter++;
+						lexer->CurrToken = TokenMulAssign;
+						return TokenMulAssign;
+					} else {
+						harbol_string_copy_cstr(lexeme, "*");
+						lexer->CurrToken = TokenStar;
+						return TokenStar;
+					}
+				}
+				case '/': {
+					harbol_string_copy_cstr(lexeme, "/");
+					lexer->CurrToken = TokenSlash;
+					return TokenSlash;
 				}
 				case '=': {
 					if( *lexer->Iter=='=' ) {
@@ -377,14 +389,48 @@ enum UrhayToken urhay_lexer_get_token(struct UrhayInterp *const lexer)
 					return TokenCarot;
 				}
 				case '<': {
-					harbol_string_copy_cstr(lexeme, "<");
-					lexer->CurrToken = TokenLess;
-					return TokenLess;
+					if( *lexer->Iter=='=' ) {
+						harbol_string_copy_cstr(lexeme, "<=");
+						lexer->Iter++;
+						lexer->CurrToken = TokenLessEq;
+						return TokenLessEq;
+					} else if( *lexer->Iter=='<' ) {
+						harbol_string_copy_cstr(lexeme, "<<");
+						lexer->Iter++;
+						lexer->CurrToken = TokenLeftSh;
+						return TokenLeftSh;
+					} else {
+						harbol_string_copy_cstr(lexeme, "<");
+						lexer->CurrToken = TokenLess;
+						return TokenLess;
+					}
 				}
 				case '>': {
-					harbol_string_copy_cstr(lexeme, ">");
-					lexer->CurrToken = TokenGreater;
-					return TokenGreater;
+					if( *lexer->Iter=='=' ) {
+						harbol_string_copy_cstr(lexeme, ">=");
+						lexer->Iter++;
+						lexer->CurrToken = TokenGreaterEq;
+						return TokenGreaterEq;
+					} else if( *lexer->Iter=='>' ) {
+						harbol_string_copy_cstr(lexeme, ">>");
+						lexer->Iter++;
+						lexer->CurrToken = TokenRightSh;
+						return TokenRightSh;
+					} else {
+						harbol_string_copy_cstr(lexeme, ">");
+						lexer->CurrToken = TokenGreater;
+						return TokenGreater;
+					}
+				}
+				case '@': {
+					harbol_string_copy_cstr(lexeme, "@");
+					lexer->CurrToken = TokenAt;
+					return TokenAt;
+				}
+				case '~': {
+					harbol_string_copy_cstr(lexeme, "~");
+					lexer->CurrToken = TokenCompl;
+					return TokenCompl;
 				}
 			}
 		}

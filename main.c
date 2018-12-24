@@ -52,9 +52,9 @@ int32_t main(const int argc, char *argv[restrict static argc+1])
 	//enum UrhayToken i = 0;
 	//while( (i=urhay_lexer_get_token(&interp)) != 0 )
 	//	printf("token:\t%i\t|\t'%s'\n", i, interp.Lexeme.CStr);
-	urhay_parse_module(&interp);
+	urhay_parse_file(&interp);
 	const clock_t start = clock();
-	urhay_interp(&interp);
+	urhay_interpret(&interp);
 	const double prof_time = (clock()-start)/(double)CLOCKS_PER_SEC;
 	printf("profiling time: '%f'\n", prof_time);
 }

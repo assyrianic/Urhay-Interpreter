@@ -21,17 +21,20 @@ enum UrhayToken {
 	/* , ? : ; */
 	TokenComma, TokenQuestion, TokenColon, TokenSemicolon,
 	
-	/* + - * = ! & | ^ */
-	TokenAdd, TokenSub, TokenStar, TokenAssign, TokenUnaryNot, TokenAmpersand, TokenVertBar, TokenCarot,
+	/* + - * / = ! & | ^ ~ */
+	TokenAdd, TokenSub, TokenStar, TokenSlash, TokenAssign, TokenUnaryNot, TokenAmpersand, TokenVertBar, TokenCarot, TokenCompl,
 	
-	/* += -= ++ -- */
-	TokenAddAssign, TokenSubAssign, /*TokenIncr, TokenDecr,*/
+	/* += -= *= /= << >> */
+	TokenAddAssign, TokenSubAssign, TokenMulAssign, TokenLeftSh, TokenRightSh,
 	
 	/* && || != == */
 	TokenLogicAnd, TokenLogicOr, TokenNotEqual, TokenEqual,
 	
 	/* < > <= >= */
-	TokenLess, TokenGreater,
+	TokenLess, TokenGreater, TokenLessEq, TokenGreaterEq,
+	
+	/* @ */
+	TokenAt,
 };
 
 void urhay_lexer_init(struct UrhayInterp *, char *);
@@ -75,41 +78,51 @@ enum UrhayToken urhay_lexer_get_token(struct UrhayInterp *);
 
 struct UrhayNode;
 
-enum UrhayExprType {
-	IntExpr, /*StringExpr, FloatExpr, PtrExpr,*/
+enum UrhayType {
+	TypeInvalid,
+	TypeInt,	// integer expression.
+	TypeFunc,	// function "pointer".
+	TypePtr,	// ptr/ref expr.
+	/*
+	TypeString,
+	TypeFloat,
+	TypeStruct,
+	TypeMap,
+	TypeArray,
+	*/
 };
 
-enum UrhayType {
-	TypeInvalid, TypeInt, /*TypeString, TypeFloat, TypePtr,*/
-};
 
 struct UrhayVar {
 	union {
 		int64_t I64;
 		/*
-		double Dbl; struct HarbolString *Str;
-		struct UrhayVar *Ref;*/
+		double Dbl;
+		struct HarbolString *Str;
+		*/
 	};
 	size_t
 		//Bytes,
 		//Offset, /* for structs/arrays. */
 		Scope
 	;
-	//enum UrhayType Tag;
+	enum UrhayType VarType;
 };
 
-enum NodeType {
+enum UrhayNodeType {
 	ASTInvalid,
-	ASTFuncDecl,
+	ASTModule, ASTFuncDecl,
 	ASTCmpndStmt, ASTIfStmt, ASTForLoop, ASTReturnStmt, ASTVarDecl, ASTVarInit,
 	ASTAssign, ASTTernaryOp,
 	ASTLogicalOr, ASTLogicalAnd, ASTBitOr, ASTBitXor, ASTBitAnd,
 	ASTEqual, ASTNotEqual,
-	ASTLessThan, ASTGreaterThan,
+	ASTLessThan, ASTGreaterThan, ASTLessEq, ASTGreaterEq,
+	ASTBitShiftLeft, ASTBitShiftRight,
 	ASTAdd, ASTSub, ASTMul,
-	ASTRef, ASTDeref, ASTFuncCall, ASTNot, ASTBitNot,
+	ASTRef, ASTDeref, ASTFuncCall, ASTFuncPtrCall, ASTNot, ASTBitNot, ASTUnaryPlus, ASTUnaryMinus,
 	ASTVar, ASTIntLit, /*ASTFloatLit, ASTStrLit,*/
 };
+
 
 struct UrhayNode {
 	union {
@@ -117,12 +130,8 @@ struct UrhayNode {
 		int64_t I64Lit;
 		struct /* binary expr */ {
 			struct UrhayNode *BinaryLeft, *BinaryRight;
-			//enum UrhayExprType BinaryTag;
 		};
-		struct /* unary expr */ {
-			struct UrhayNode *Unary;
-			//enum UrhayExprType UnaryTag;
-		};
+		struct UrhayNode *Unary;
 		struct /* if stmt or ternary operator */ {
 			struct UrhayNode *Cond, *Then, *Else;
 		};
@@ -146,9 +155,9 @@ struct UrhayNode {
 			struct UrhayNode *Caller;
 			struct HarbolVector *Args;
 		};
-		struct UrhayNode *PtrOp;
+		struct HarbolLinkMap *Module;
 	};
-	enum NodeType NodeTag;
+	enum UrhayNodeType NodeTag;
 };
 
 void urhay_ast_print(const struct UrhayNode *);
@@ -156,7 +165,8 @@ void urhay_ast_print(const struct UrhayNode *);
 
 struct UrhayInterp {
 	struct HarbolLinkMap
-		SymTable, KeyWords
+		SymTable, // global symtable that will hold functions.
+		KeyWords // reserved keywords here!
 	;
 	struct /* UrhayLexer */ {
 		struct HarbolString Lexeme;
@@ -164,11 +174,13 @@ struct UrhayInterp {
 		size_t Line;
 		enum UrhayToken CurrToken;
 	};
+	struct UrhayNode *ModuleNode;
+	//struct HarbolLinkMap *Modules; // linkmap of module nodes.
 };
 
-struct HarbolLinkMap *urhay_parse_module(struct UrhayInterp *);
+bool urhay_parse_file(struct UrhayInterp *);
 void urhay_err_out(struct UrhayInterp *, const char [], ...);
-bool urhay_interp(struct UrhayInterp *);
+bool urhay_interpret(struct UrhayInterp *);
 
 
 #endif /* Urhay_HEADER */
