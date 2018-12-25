@@ -1,51 +1,26 @@
-/*
-main1()
-{
-	return fib(34);
-}
-
-fib(n)
-{
-	if(n<2) {
-		return n;
-	} else {
-		return fib(n-1) + fib(n-2);
-	}
-}
-
-main2() {
-	var i=0;
-	if( i==0 ) {
-		var n = func3(1, 2, 3);
-		i += n;
-	}
-	return i;
-}
-
-func3(x, y, z)
-{
-	return x * y + z;
-}
-
-func2(i)
-{
-	return 1;
-}
-*/
-
 main()
 {
-	var i = 5, x = 6;
-	ptr_test(&x);
-	if( x<10 )
-		i *= x;
-	else if( x>10 && x<50 )
-		i *= x;
-	return i;
+	var flt = 1.0;
+	var i = 5, x = 8;
+	func1(ptr_test, &x);
+	if i==5 {
+		i+=2;
+		flt += 4.0;
+	}
+	return flt;
+}
+
+func1(f, x)
+{
+	f(x);
 }
 
 ptr_test(ref)
 {
-	@ref += 2;
-	@ref = @ref << 1;
+	@ref = 10;
+}
+
+fib(n)
+{
+	return n<2 ? n : fib(n-1) + fib(n-2);
 }

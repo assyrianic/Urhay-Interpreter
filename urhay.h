@@ -10,10 +10,10 @@ enum UrhayToken {
 	TokenInvalid=0,
 	
 	/* id 123 12.34 "string" 'char' */
-	TokenIdentifier, TokenIntLiteral, /*TokenFloatLiteral, TokenStringLiteral, TokenCharLiteral,*/
+	TokenIdentifier, TokenIntLiteral, TokenFloatLiteral, /*TokenStringLiteral, TokenCharLiteral,*/
 	
-	/* if else for return var hook */
-	TokenIf, TokenElse, TokenFor, TokenReturn, TokenVar, TokenHook,
+	/* if else for return var hook null */
+	TokenIf, TokenElse, TokenFor, TokenReturn, TokenVar, TokenHook, TokenNull,
 	
 	/* () [] {} */
 	TokenLeftParen, TokenRightParen, TokenLeftSqBracket, TokenRightSqBracket, TokenLeftCurlyBracket, TokenRightCurlyBracket,
@@ -42,40 +42,6 @@ void urhay_lexer_preprocess(struct UrhayInterp *);
 enum UrhayToken urhay_lexer_get_token(struct UrhayInterp *);
 
 
-/* Grammar
- * module = <function>* ;
- * function = <id> '(' <id>* ([',' <id>])* ')' <statement> ;
- * statement = <cmpnd_stmt> | <if_stmt> | <iter_stmt> | <return_stmt> | <var_decl> | <main_expr> ;
- * cmpnd_stmt = '{' <statement>* '}' ;
- * if_stmt = 'if' '(' <expr> ')' <statement> ;
- * iter_stmt = 'for' '(' <expr> ')' <statement> ;
- * return_stmt = 'return' <expr> ';' ;
- * var_decl = 'var' <var_decl_list> ';' ;
- * var_decl_list = <var_assign> [',' <var_decl_list>] ;
- * var_assign = <id> ['=' <assignment_exp>] ;
- * main_expr = <comma_expr> ';' ;
- * comma_expr = <assignment_exp> [',' <comma_expr>] ';' ;
- * assignment_exp = <conditional_exp> | <unary_exp> <assignment_operator> <assignment_exp> ;
- * assignment_operator = '=' | '*=' | '/=' | '%=' | '+=' | '-=' | '<<=' | '>>=' | '&=' | '^=' | '|=' ;
- * conditional_exp = <logical_or_exp> ['?' <expr> ':' <conditional_exp>] ;
- * logical_or_exp = <logical_and_exp> ['||' <logical_or_exp>] ;
- * logical_and_exp = <or_exp> ['&&' <logical_and_exp>] ;
- * or_exp = <xor_exp> ['|' <or_exp>] ;
- * xor_exp = <and_exp> ['^' <xor_exp>] ;
- * and_exp = <equality_exp> ['&' <and_exp>] ;
- * equality_exp = <relational_exp> [('==' | '!=') <equality_exp>] ;
- * relational_exp = <shift_exp> [('>=' | '<=' | '<' | '>') <relational_exp>] ;
- * shift_exp = <additive_exp> [('<<' | '>>') <shift_exp>] ;
- * additive_exp = <mult_exp> [('+' | '-') <additive_exp>] ;
- * mult_exp = <cast_exp> [('/' | '*' | '%') <mult_exp>] ;
- * cast_exp = <unary_exp> | '(' <type_name> ')' <cast_exp> ;
- * unary_exp = <postfix_exp> | <unary_operator> <cast_exp> | 'sizeof' ['('] <unary_exp> [')'] | ;
- * unary_operator = '&' | '*' | '+' | '-' | '~' | '!' ;
- * postfix_exp = <primary_exp> [ '[' <expr> ']' | '(' <arg_expr_list> ')' | '(' ')' | '.' <id> ] ;
- * arg_expr_list = <main_expr> [',' <arg_expr_list>] ;
- * primary_exp = <id> | <int> | <float> | <str> ;
- */
-
 struct UrhayNode;
 
 enum UrhayType {
@@ -83,31 +49,24 @@ enum UrhayType {
 	TypeInt,	// integer expression.
 	TypeFunc,	// function "pointer".
 	TypePtr,	// ptr/ref expr.
+	TypeFloat,	// float expr.
 	/*
 	TypeString,
-	TypeFloat,
 	TypeStruct,
 	TypeMap,
 	TypeArray,
 	*/
 };
 
-
 struct UrhayVar {
-	union {
-		int64_t I64;
-		/*
-		double Dbl;
-		struct HarbolString *Str;
-		*/
-	};
+	struct HarbolVariant Var;
 	size_t
 		//Bytes,
 		//Offset, /* for structs/arrays. */
 		Scope
 	;
-	enum UrhayType VarType;
 };
+
 
 enum UrhayNodeType {
 	ASTInvalid,
@@ -120,14 +79,14 @@ enum UrhayNodeType {
 	ASTBitShiftLeft, ASTBitShiftRight,
 	ASTAdd, ASTSub, ASTMul,
 	ASTRef, ASTDeref, ASTFuncCall, ASTFuncPtrCall, ASTNot, ASTBitNot, ASTUnaryPlus, ASTUnaryMinus,
-	ASTVar, ASTIntLit, /*ASTFloatLit, ASTStrLit,*/
+	ASTVar, ASTIntLit, ASTFloatLit, /*ASTStrLit,*/
 };
 
 
 struct UrhayNode {
 	union {
 		struct HarbolString Iden; // for use in an expression.
-		int64_t I64Lit;
+		struct HarbolVariant LitVal; // literal value.
 		struct /* binary expr */ {
 			struct UrhayNode *BinaryLeft, *BinaryRight;
 		};

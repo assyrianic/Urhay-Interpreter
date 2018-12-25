@@ -4,7 +4,7 @@
 #include "urhay.h"
 
 
-int64_t urhay_walk(struct UrhayInterp *, struct UrhayNode *, struct HarbolLinkMap *, struct HarbolLinkMap *, size_t, bool *);
+void urhay_walk(struct UrhayInterp *, struct UrhayNode *, struct HarbolLinkMap *, struct HarbolLinkMap *, size_t, bool *, struct HarbolVariant *);
 struct HarbolLinkMap *urhay_setup_func_params(struct UrhayInterp *, struct HarbolLinkMap *, struct HarbolLinkMap *);
 
 FILE *g_debug_print;
@@ -15,7 +15,6 @@ bool urhay_var_free(void *v)
 	free(*pvar), *pvar=NULL;
 	return true;
 }
-
 
 void urhay_ast_print(const struct UrhayNode *const node)
 {
@@ -216,7 +215,7 @@ void urhay_ast_print(const struct UrhayNode *const node)
 		}
 		case ASTIntLit: {
 			puts("AST Integer Literal Expr Start");
-			printf("AST Integer Literal: '%" PRIi64 "'\n", node->I64Lit);
+			printf("AST Integer Literal: '%" PRIi64 "'\n", node->LitVal.Val.Int64);
 			puts("AST Integer Literal Expr End");
 			break;
 		}
@@ -252,117 +251,376 @@ void urhay_ast_print(const struct UrhayNode *const node)
 	}
 }
 
-int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const node, struct HarbolLinkMap *const restrict params, struct HarbolLinkMap *const restrict localvars, const size_t scope, bool *const do_ret)
+void variant_int_to_double(struct HarbolVariant *const val)
+{
+	val->Val.Double = (double)val->Val.Int64;
+	val->TypeTag = TypeFloat;
+}
+void variant_double_to_int(struct HarbolVariant *const val)
+{
+	val->Val.Int64 = (int64_t)val->Val.Double;
+	val->TypeTag = TypeInt;
+}
+
+void urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const node, struct HarbolLinkMap *const restrict params, struct HarbolLinkMap *const restrict localvars, const size_t scope, bool *const do_ret, struct HarbolVariant *const val)
 {
 	if( !node )
-		return 0;
+		return;
 	//fprintf(g_debug_print, "do_ret valid?: '%s' | do_ret value: '%u'\n", do_ret ? "yes" : "no", do_ret ? *do_ret : 0xff);
 	switch( node->NodeTag ) {
+		case ASTFloatLit:
 		case ASTIntLit: {
-			//fprintf(g_debug_print, "ASTIntLit '%" PRIi64 "'\n", node->I64Lit);
-			return node->I64Lit;
+			//fprintf(g_debug_print, "ASTIntLit '%" PRIi64 "'\n", node->LitVal.Val.Int64);
+			*val = node->LitVal;
+			return;
 		}
 		case ASTVar: {
-			//if( node->Type==TypeFunc )
-			struct UrhayVar *const v = harbol_linkmap_has_key(params, node->Iden.CStr)
-				? harbol_linkmap_get(params, node->Iden.CStr).Ptr
-				: harbol_linkmap_get(localvars, node->Iden.CStr).Ptr;
+			// support function pointer.
+			if( harbol_linkmap_has_key(&interp->SymTable, node->Iden.CStr) ) {
+				struct UrhayNode *const func = harbol_linkmap_get(&interp->SymTable, node->Iden.CStr).Ptr;
+				val->Val.Ptr = func;
+				val->TypeTag = TypeFunc;
+				return;
+			}
+			
+			struct UrhayVar *const v = harbol_linkmap_has_key(params, node->Iden.CStr) ? harbol_linkmap_get(params, node->Iden.CStr).Ptr : harbol_linkmap_get(localvars, node->Iden.CStr).Ptr;
 			if( !v ) {
 				printf("Urhay Interpreter Error: **** ASTVar: undefined variable '%s'! ****\n", node->Iden.CStr);
 				exit(-1);
-			} else if( v->Scope > scope ) {
+			} else if( v->Scope>scope ) {
 				printf("Urhay Interpreter Error: **** ASTVar: variable '%s' is out of scope! ****\n", node->Iden.CStr);
 				exit(-1);
 			}
-			//fprintf(g_debug_print, "ASTVar '%s': '%p'\n", node->Iden.CStr, v);
-			return v->I64;
+			*val = v->Var;
+			//fprintf(g_debug_print, "ASTVar '%s'\n", node->Iden.CStr);
+			return;
 		}
 		case ASTMul: {
 			//fputs("ASTMul\n", g_debug_print);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) * urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			if( left.TypeTag==TypePtr || right.TypeTag==TypePtr ) {
+				puts("Urhay Interpreter Warning: **** ASTMul: ptr arithmetic is not allowed! ****\n");
+			} else if( left.TypeTag==TypeFloat || right.TypeTag==TypeFloat ) {
+				if( left.TypeTag==TypeInt )
+					variant_int_to_double(&left);
+				if( right.TypeTag==TypeInt )
+					variant_int_to_double(&right);
+				val->Val.Double = left.Val.Double * right.Val.Double;
+				val->TypeTag = TypeFloat;
+			} else {
+				// TODO: add string and float oriented arithmetic.
+				val->Val.Int64 = left.Val.Int64 * right.Val.Int64;
+			}
+			return;
 		}
 		case ASTSub: {
 			//fputs("ASTSub\n", g_debug_print);
-			const int64_t val = urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) - val;
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			if( left.TypeTag==TypePtr || right.TypeTag==TypePtr ) {
+				puts("Urhay Interpreter Warning: **** ASTSub: ptr arithmetic is not allowed! ****\n");
+			} else if( left.TypeTag==TypeFloat || right.TypeTag==TypeFloat ) {
+				if( left.TypeTag==TypeInt )
+					variant_int_to_double(&left);
+				if( right.TypeTag==TypeInt )
+					variant_int_to_double(&right);
+				val->Val.Double = left.Val.Double - right.Val.Double;
+				val->TypeTag = TypeFloat;
+			} else {
+				val->Val.Int64 = left.Val.Int64 - right.Val.Int64;
+			}
+			return;
 		}
 		case ASTAdd: {
 			//fputs("ASTAdd\n", g_debug_print);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) + urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			if( left.TypeTag==TypePtr || right.TypeTag==TypePtr ) {
+				puts("Urhay Interpreter Warning: **** ASTAdd: ptr arithmetic is not allowed! ****\n");
+			} else if( left.TypeTag==TypeFloat || right.TypeTag==TypeFloat ) {
+				if( left.TypeTag==TypeInt )
+					variant_int_to_double(&left);
+				if( right.TypeTag==TypeInt )
+					variant_int_to_double(&right);
+				val->Val.Double = left.Val.Double + right.Val.Double;
+				val->TypeTag = TypeFloat;
+			} else {
+				val->Val.Int64 = left.Val.Int64 + right.Val.Int64;
+			}
+			return;
 		}
 		case ASTBitShiftLeft: {
-			//fputs("ASTAdd\n", g_debug_print);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) << urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+			//fputs("ASTBitShiftLeft\n", g_debug_print);
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			if( left.TypeTag!=TypeInt || right.TypeTag!=TypeInt ) {
+				puts("Urhay Interpreter Warning: **** ASTBitShiftLeft: cannot do bitwise operations on non-integer type. ****\n");
+			} else {
+				val->Val.UInt64 = left.Val.UInt64 << right.Val.UInt64;
+			}
+			return;
 		}
 		case ASTBitShiftRight: {
-			//fputs("ASTAdd\n", g_debug_print);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) >> urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+			//fputs("ASTBitShiftRight\n", g_debug_print);
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			if( left.TypeTag!=TypeInt || right.TypeTag!=TypeInt ) {
+				puts("Urhay Interpreter Warning: **** ASTBitShiftRight: cannot do bitwise operations on non-integer type. ****\n");
+			} else {
+				val->Val.UInt64 = left.Val.UInt64 >> right.Val.UInt64;
+			}
+			return;
 		}
 		case ASTLessThan: {
 			//fputs("ASTLessThan\n", g_debug_print);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) < urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			if( left.TypeTag==TypePtr || right.TypeTag==TypePtr ) {
+				val->Val.Bool = left.Val.UInt64 < right.Val.UInt64;
+			} else if( left.TypeTag==TypeFloat || right.TypeTag==TypeFloat ) {
+				if( left.TypeTag==TypePtr || right.TypeTag==TypePtr ) {
+					puts("Urhay Interpreter Error: **** ASTLessThan: cannot compare floats and ptrs. ****\n");
+					exit(-1);
+				}
+				if( left.TypeTag==TypeInt )
+					variant_int_to_double(&left);
+				if( right.TypeTag==TypeInt )
+					variant_int_to_double(&right);
+				val->Val.Bool = left.Val.Double < right.Val.Double;
+			} else {
+				val->Val.Bool = left.Val.Int64 < right.Val.Int64;
+			}
+			val->TypeTag = TypeInt;
+			return;
 		}
 		case ASTGreaterThan: {
 			//fputs("ASTGreaterThan\n", g_debug_print);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) > urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			if( left.TypeTag==TypePtr || right.TypeTag==TypePtr ) {
+				val->Val.Bool = left.Val.UInt64 > right.Val.UInt64;
+			} else if( left.TypeTag==TypeFloat || right.TypeTag==TypeFloat ) {
+				if( left.TypeTag==TypePtr || right.TypeTag==TypePtr ) {
+					puts("Urhay Interpreter Error: **** ASTGreaterThan: cannot compare floats and ptrs. ****\n");
+					exit(-1);
+				}
+				if( left.TypeTag==TypeInt )
+					variant_int_to_double(&left);
+				if( right.TypeTag==TypeInt )
+					variant_int_to_double(&right);
+				val->Val.Bool = left.Val.Double > right.Val.Double;
+			} else {
+				val->Val.Bool = left.Val.Int64 > right.Val.Int64;
+			}
+			val->TypeTag = TypeInt;
+			return;
 		}
 		case ASTLessEq: {
 			//fputs("ASTLessEq\n", g_debug_print);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) <= urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			if( left.TypeTag==TypePtr || right.TypeTag==TypePtr ) {
+				val->Val.Bool = left.Val.UInt64 <= right.Val.UInt64;
+			} else if( left.TypeTag==TypeFloat || right.TypeTag==TypeFloat ) {
+				if( left.TypeTag==TypePtr || right.TypeTag==TypePtr ) {
+					puts("Urhay Interpreter Error: **** ASTLessEq: cannot compare floats and ptrs. ****\n");
+					exit(-1);
+				}
+				if( left.TypeTag==TypeInt )
+					variant_int_to_double(&left);
+				if( right.TypeTag==TypeInt )
+					variant_int_to_double(&right);
+				val->Val.Bool = left.Val.Double <= right.Val.Double;
+			} else {
+				val->Val.Bool = left.Val.Int64 <= right.Val.Int64;
+			}
+			val->TypeTag = TypeInt;
+			return;
 		}
 		case ASTGreaterEq: {
 			//fputs("ASTGreaterEq\n", g_debug_print);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) >= urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			if( left.TypeTag==TypePtr || right.TypeTag==TypePtr ) {
+				val->Val.Bool = left.Val.UInt64 >= right.Val.UInt64;
+			} else if( left.TypeTag==TypeFloat || right.TypeTag==TypeFloat ) {
+				if( left.TypeTag==TypePtr || right.TypeTag==TypePtr ) {
+					puts("Urhay Interpreter Error: **** ASTLessEq: cannot compare floats and ptrs. ****\n");
+					exit(-1);
+				}
+				if( left.TypeTag==TypeInt )
+					variant_int_to_double(&left);
+				if( right.TypeTag==TypeInt )
+					variant_int_to_double(&right);
+				val->Val.Bool = left.Val.Double >= right.Val.Double;
+			} else {
+				val->Val.Bool = left.Val.Int64 >= right.Val.Int64;
+			}
+			val->TypeTag = TypeInt;
+			return;
 		}
 		case ASTEqual: {
 			//fputs("ASTEqual\n", g_debug_print);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) == urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			if( left.TypeTag==TypePtr || right.TypeTag==TypePtr ) {
+				val->Val.Bool = left.Val.UInt64 == right.Val.UInt64;
+			} else if( left.TypeTag==TypeFloat || right.TypeTag==TypeFloat ) {
+				if( left.TypeTag==TypePtr || right.TypeTag==TypePtr ) {
+					puts("Urhay Interpreter Error: **** ASTLessEq: cannot compare floats and ptrs. ****\n");
+					exit(-1);
+				}
+				if( left.TypeTag==TypeInt )
+					variant_int_to_double(&left);
+				if( right.TypeTag==TypeInt )
+					variant_int_to_double(&right);
+				val->Val.Bool = left.Val.Double == right.Val.Double;
+			} else {
+				val->Val.Bool = left.Val.Int64 == right.Val.Int64;
+			}
+			val->TypeTag = TypeInt;
+			return;
 		}
 		case ASTNotEqual: {
 			//fputs("ASTNotEqual\n", g_debug_print);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) != urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			if( left.TypeTag==TypePtr || right.TypeTag==TypePtr ) {
+				val->Val.Bool = left.Val.UInt64 != right.Val.UInt64;
+			} else if( left.TypeTag==TypeFloat || right.TypeTag==TypeFloat ) {
+				if( left.TypeTag==TypePtr || right.TypeTag==TypePtr ) {
+					puts("Urhay Interpreter Error: **** ASTLessEq: cannot compare floats and ptrs. ****\n");
+					exit(-1);
+				}
+				if( left.TypeTag==TypeInt )
+					variant_int_to_double(&left);
+				if( right.TypeTag==TypeInt )
+					variant_int_to_double(&right);
+				val->Val.Bool = left.Val.Double != right.Val.Double;
+			} else {
+				val->Val.Bool = left.Val.Int64 != right.Val.Int64;
+			}
+			val->TypeTag = TypeInt;
+			return;
 		}
 		case ASTBitAnd: {
 			//fputs("ASTBitAnd\n", g_debug_print);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) & urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			if( left.TypeTag!=TypeInt || right.TypeTag!=TypeInt ) {
+				puts("Urhay Interpreter Warning: **** ASTBitAnd: cannot do bitwise operations on non-integer type. ****\n");
+			} else {
+				val->Val.UInt64 = left.Val.UInt64 & right.Val.UInt64;
+			}
+			return;
 		}
 		case ASTBitXor: {
 			//fputs("ASTBitXor\n", g_debug_print);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) ^ urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			if( left.TypeTag!=TypeInt || right.TypeTag!=TypeInt ) {
+				puts("Urhay Interpreter Warning: **** ASTBitXor: cannot do bitwise operations on non-integer type. ****\n");
+			} else {
+				val->Val.UInt64 = left.Val.UInt64 ^ right.Val.UInt64;
+			}
+			return;
 		}
 		case ASTBitOr: {
 			//fputs("ASTBitOr\n", g_debug_print);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) | urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			if( left.TypeTag!=TypeInt || right.TypeTag!=TypeInt ) {
+				puts("Urhay Interpreter Warning: **** ASTBitOr: cannot do bitwise operations on non-integer type. ****\n");
+			} else {
+				val->Val.UInt64 = left.Val.UInt64 | right.Val.UInt64;
+			}
+			return;
 		}
 		case ASTLogicalAnd: {
 			//fputs("ASTLogicalAnd\n", g_debug_print);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) && urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			val->Val.Bool = left.Val.UInt64 && right.Val.UInt64;
+			val->TypeTag = TypeInt;
+			return;
 		}
 		case ASTLogicalOr: {
 			//fputs("ASTLogicalOr\n", g_debug_print);
-			return urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret) || urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
+			struct HarbolVariant left={0}, right={0};
+			urhay_walk(interp, node->BinaryLeft, params, localvars, scope, do_ret, &left);
+			urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &right);
+			val->Val.Bool = left.Val.UInt64 || right.Val.UInt64;
+			val->TypeTag = TypeInt;
+			return;
 		}
 		case ASTNot: {
 			//fputs("ASTNot\n", g_debug_print);
-			return !urhay_walk(interp, node->Unary, params, localvars, scope, do_ret);
+			struct HarbolVariant unary={0};
+			urhay_walk(interp, node->Unary, params, localvars, scope, do_ret, &unary);
+			if( unary.TypeTag!=TypeInt )
+				puts("Urhay Interpreter Warning: **** ASTNot: cannot do unary ! operation on non-integer type. ****\n");
+			else val->Val.Int64 = !unary.Val.Int64;
+			return;
 		}
 		case ASTUnaryPlus: {
 			//fputs("ASTUnaryPlus\n", g_debug_print);
-			return +urhay_walk(interp, node->Unary, params, localvars, scope, do_ret);
+			struct HarbolVariant unary={0};
+			urhay_walk(interp, node->Unary, params, localvars, scope, do_ret, &unary);
+			if( unary.TypeTag==TypeInt )
+				val->Val.Int64 = +unary.Val.Int64;
+			else if( unary.TypeTag==TypeFloat ) {
+				val->Val.Double = +unary.Val.Double;
+				val->TypeTag = TypeFloat;
+			}
+			else puts("Urhay Interpreter Warning: **** ASTUnaryPlus: cannot do unary + operation on ptr type. ****\n");
+			return;
 		}
 		case ASTUnaryMinus: {
 			//fputs("ASTUnaryMinus\n", g_debug_print);
-			return -urhay_walk(interp, node->Unary, params, localvars, scope, do_ret);
+			struct HarbolVariant unary={0};
+			urhay_walk(interp, node->Unary, params, localvars, scope, do_ret, &unary);
+			if( unary.TypeTag==TypeInt )
+				val->Val.Int64 = -unary.Val.Int64;
+			else if( unary.TypeTag==TypeFloat ) {
+				val->Val.Double = -unary.Val.Double;
+				val->TypeTag = TypeFloat;
+			}
+			else puts("Urhay Interpreter Warning: **** ASTUnaryMinus: cannot do unary - operation on non-integer type. ****\n");
+			return;
 		}
 		case ASTBitNot: {
 			//fputs("ASTBitNot\n", g_debug_print);
-			return ~urhay_walk(interp, node->Unary, params, localvars, scope, do_ret);
+			struct HarbolVariant unary={0};
+			urhay_walk(interp, node->Unary, params, localvars, scope, do_ret, &unary);
+			if( unary.TypeTag!=TypeInt )
+				puts("Urhay Interpreter Warning: **** ASTBitNot: cannot do unary ~ operation on non-integer type. ****\n");
+			else val->Val.Int64 = ~unary.Val.Int64;
+			return;
 		}
 		case ASTTernaryOp: {
 			//fputs("ASTTernaryOp\n", g_debug_print);
-			return urhay_walk(interp, node->Cond, params, localvars, scope, do_ret)
-				? urhay_walk(interp, node->Then, params, localvars, scope, do_ret)
-				: urhay_walk(interp, node->Else, params, localvars, scope, do_ret);
+			struct HarbolVariant cond={0};
+			urhay_walk(interp, node->Cond, params, localvars, scope, do_ret, &cond);
+			( cond.Val.Bool )
+				? urhay_walk(interp, node->Then, params, localvars, scope, do_ret, val)
+				: urhay_walk(interp, node->Else, params, localvars, scope, do_ret, val);
+			return;
 		}
 		case ASTAssign: {
 			//fputs("ASTAssign\n", g_debug_print);
@@ -374,20 +632,32 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 				if( !v ) {
 					printf("Urhay Interpreter Error: **** ASTAssign: undefined variable '%s'! ****\n", node->BinaryLeft->Iden.CStr);
 					exit(-1);
-				} else if( v->Scope > scope ) {
+				} else if( v->Scope>scope ) {
 					printf("Urhay Interpreter Error: **** ASTAssign: variable '%s' is out of scope! ****\n", varnode->Iden.CStr);
 					exit(-1);
 				}
-				v->I64 = urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
-				return v->I64;
+				urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &v->Var);
+				*val = v->Var;
+				return;
 			} else if( tag==ASTDeref ) {
-				const int64_t iptr = urhay_walk(interp, varnode->Unary, params, localvars, scope, do_ret);
-				struct UrhayVar *const v = (struct UrhayVar *)(intptr_t)iptr;
-				v->I64 = urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret);
-				return v->I64;
-			} else {
-				return 0;
+				struct HarbolVariant ptr={0};
+				urhay_walk(interp, varnode->Unary, params, localvars, scope, do_ret, &ptr);
+				if( ptr.TypeTag != TypePtr ) {
+					printf("Urhay Interpreter Error: **** ASTAssign: cannot dereference a non-ptr! ****\n");
+					exit(-1);
+				}
+				struct UrhayVar *const v = ptr.Val.Ptr;
+				if( !v ) {
+					printf("Urhay Interpreter Error: **** ASTAssign: NULL ptr exception! ****\n");
+					exit(-1);
+				} else if( v->Scope>scope ) {
+					puts("Urhay Interpreter Error: **** ASTAssign: attempting to dereference variable that's out of scope! ****");
+					exit(-1);
+				}
+				urhay_walk(interp, node->BinaryRight, params, localvars, scope, do_ret, &v->Var);
+				*val = v->Var;
 			}
+			return;
 		}
 		case ASTFuncCall: {
 			//fputs("ASTFuncCall\n", g_debug_print);
@@ -395,7 +665,19 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 				puts("Urhay Interpreter Error: **** ASTFuncCall: cannot call a function except by name or reference! ****\n");
 				exit(-1);
 			}
-			struct UrhayNode *func_node = harbol_linkmap_get(&interp->SymTable, node->Caller->Iden.CStr).Ptr;
+			struct HarbolVariant funcvar = {0};
+			urhay_walk(interp, node->Caller, params, localvars, scope, do_ret, &funcvar);
+			
+			struct UrhayNode *func_node = NULL;
+			if( harbol_linkmap_has_key(&interp->SymTable, node->Caller->Iden.CStr) )
+				func_node = harbol_linkmap_get(&interp->SymTable, node->Caller->Iden.CStr).Ptr;
+			else if( harbol_linkmap_has_key(params, node->Caller->Iden.CStr) ) {
+				func_node = funcvar.TypeTag==TypeFunc ? funcvar.Val.Ptr : NULL;
+			}
+			else if( harbol_linkmap_has_key(localvars, node->Caller->Iden.CStr) ) {
+				func_node = funcvar.TypeTag==TypeFunc ? funcvar.Val.Ptr : NULL;
+			}
+			
 			if( !func_node ) {
 				printf("Urhay Interpreter Error: **** ASTFuncCall: function '%s' doesn't exist! ****\n", node->Caller->Iden.CStr);
 				exit(-1);
@@ -409,60 +691,64 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 				struct UrhayNode *arg_expr = harbol_vector_get(node->Args, i).Ptr;
 				if( !arg_expr )
 					continue;
-				v->I64 = urhay_walk(interp, arg_expr, params, localvars, scope, do_ret);
+				urhay_walk(interp, arg_expr, params, localvars, scope, do_ret, &v->Var);
 				args_given++;
-				//fprintf(g_debug_print, "call arg %zu: '0x%" PRIx64 "'\n", i, v->I64);
+				//fprintf(g_debug_print, "call arg[%zu]: '%" PRIi64 "'\n", i, v->Var.Val.Int64);
 			}
 			if( args_given < harbol_linkmap_get_count(func_node->Params) ) {
 				printf("Urhay Interpreter Error: **** ASTFuncCall: Not enough params to call '%s' ****\n", node->Caller->Iden.CStr);
 				exit(-1);
 			}
 			bool ret = false;
-			const int64_t val = urhay_walk(interp, func_node->FuncBody, frame_params, func_node->LocalVars, scope+1, &ret);
+			urhay_walk(interp, func_node->FuncBody, frame_params, func_node->LocalVars, scope+1, &ret, val);
 			harbol_linkmap_free(&frame_params, urhay_var_free);
 			harbol_linkmap_free(&func_node->LocalVars, urhay_var_free);
-			//fprintf(g_debug_print, "func call return val: %" PRIi64 "\n", val);
-			return val;
+			//fprintf(g_debug_print, "func call return val: %" PRIi64 "\n", val->Val.Int64);
+			return;
 		}
 		case ASTCmpndStmt: {
 			//fputs("ASTCmpndStmt\n", g_debug_print);
 			const union HarbolValue *const end = harbol_vector_get_iter_end_count(&node->Stmts);
 			for( const union HarbolValue *iter = harbol_vector_get_iter(&node->Stmts) ; iter && iter<end ; iter++ ) {
 				struct UrhayNode *stmt = iter->Ptr;
-				const int64_t val = urhay_walk(interp, stmt, params, localvars, scope+1, do_ret);
+				urhay_walk(interp, stmt, params, localvars, scope+1, do_ret, val);
 				if( do_ret && *do_ret )
-					return val;
+					return;
 			}
-			return 0;
+			return;
 		}
 		case ASTIfStmt: {
 			//fputs("ASTIfStmt\n", g_debug_print);
-			const bool cond = urhay_walk(interp, node->Cond, params, localvars, scope, do_ret);
-			//fprintf(g_debug_print, "\t\t\t\tif cond value: '%s'\n", cond ? "true" : "false");
-			if( cond ) {
-				return urhay_walk(interp, node->Then, params, localvars, scope, do_ret);
+			struct HarbolVariant cond={0};
+			urhay_walk(interp, node->Cond, params, localvars, scope, do_ret, &cond);
+			//fprintf(g_debug_print, "\t\t\t\tif cond value: '%s'\n", cond.Val.Bool ? "true" : "false");
+			if( cond.Val.Bool ) {
+				urhay_walk(interp, node->Then, params, localvars, scope, do_ret, val);
 			} else if( node->Else ) {
-				return urhay_walk(interp, node->Else, params, localvars, scope, do_ret);
+				urhay_walk(interp, node->Else, params, localvars, scope, do_ret, val);
 			}
-			return 0;
+			return;
 		}
 		case ASTForLoop: {
 			//fputs("ASTForLoop\n", g_debug_print);
 			size_t runaway_protect = 100000000;
-			while( urhay_walk(interp, node->ForCond, params, localvars, scope, do_ret) && runaway_protect ) {
-				const int64_t val = urhay_walk(interp, node->LoopStmt, params, localvars, scope, do_ret);
+			struct HarbolVariant cond={0};
+			urhay_walk(interp, node->ForCond, params, localvars, scope, do_ret, &cond);
+			while( cond.Val.Bool && runaway_protect ) {
+				urhay_walk(interp, node->LoopStmt, params, localvars, scope, do_ret, val);
 				runaway_protect--;
 				if( do_ret && *do_ret )
-					return val;
+					return;
+				urhay_walk(interp, node->ForCond, params, localvars, scope, do_ret, &cond);
 			}
-			return 0;
+			return;
 		}
 		case ASTReturnStmt: {
 			//fputs("ASTReturnStmt\n", g_debug_print);
 			if( do_ret )
 				*do_ret = true;
-			const int64_t val = urhay_walk(interp, node->Return, params, localvars, scope, do_ret);
-			return val;
+			urhay_walk(interp, node->Return, params, localvars, scope, do_ret, val);
+			return;
 		}
 		case ASTVarDecl: {
 			//fputs("ASTVarDecl\n", g_debug_print);
@@ -476,9 +762,9 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 				}
 				harbol_linkmap_insert(localvars, varnode->Varname.CStr, (union HarbolValue){ .Ptr=var });
 				var->Scope = scope;
-				var->I64 = urhay_walk(interp, varnode->Value, params, localvars, scope, do_ret);
+				urhay_walk(interp, varnode->Value, params, localvars, scope, do_ret, &var->Var);
 			}
-			return 0;
+			return;
 		}
 		case ASTRef: {
 			//fputs("ASTRef\n", g_debug_print);
@@ -493,22 +779,31 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 				exit(-1);
 			}
 			//fprintf(g_debug_print, "reference: '%" PRIi64 "'\n", (int64_t)(intptr_t)v);
-			return (int64_t)(intptr_t)v;
+			memset(val, 0, sizeof *val);
+			val->Val.Ptr = v;
+			val->TypeTag = TypePtr;
+			return;
 		}
 		case ASTDeref: {
 			//fputs("ASTDeref\n", g_debug_print);
-			if( node->Unary && !(node->Unary->NodeTag == ASTVar || node->Unary->NodeTag == ASTDeref || node->Unary->NodeTag == ASTRef) ) {
+			struct UrhayNode *deref = node->Unary;
+			if( deref && !(deref->NodeTag == ASTVar || deref->NodeTag == ASTDeref || deref->NodeTag == ASTRef) ) {
 				puts("Urhay Interpreter Error: **** ASTDeref: cannot de-reference non-var. ****");
 				exit(-1);
 			}
-			
-			struct UrhayVar *const v = (struct UrhayVar *)(intptr_t)urhay_walk(interp, node->Unary, params, localvars, scope, do_ret);
-			if( !v ) {
+			struct HarbolVariant p = {0};
+			urhay_walk(interp, deref, params, localvars, scope, do_ret, &p);
+			struct UrhayVar *const v = p.Val.Ptr;
+			if( !v || p.TypeTag != TypePtr ) {
 				puts("Urhay Interpreter Error: **** ASTDeref: NULL ptr exception! ****");
+				exit(-1);
+			} else if( v->Scope>scope ) {
+				puts("Urhay Interpreter Error: **** ASTDeref: attempting to dereference variable that's out of scope! ****");
 				exit(-1);
 			}
 			//printf("deref %p\n", v);
-			return v->I64;
+			*val = v->Var;
+			return;
 		}
 		case ASTModule: {
 			//fputs("ASTModule\n", g_debug_print);
@@ -516,12 +811,12 @@ int64_t urhay_walk(struct UrhayInterp *const interp, struct UrhayNode *const nod
 			main_node->LocalVars = harbol_linkmap_new();
 			bool ret = false;
 			struct HarbolLinkMap *main_params = urhay_setup_func_params(interp, main_node->Params, main_node->LocalVars);
-			const int64_t result = urhay_walk(interp, main_node->FuncBody, main_params, main_node->LocalVars, 0, &ret);
+			urhay_walk(interp, main_node->FuncBody, main_params, main_node->LocalVars, 0, &ret, val);
 			harbol_linkmap_free(&main_params, urhay_var_free);
 			harbol_linkmap_free(&main_node->LocalVars, urhay_var_free);
-			return result;
+			return;
 		}
-		default: return 0;
+		default: return;
 	}
 }
 
@@ -533,7 +828,7 @@ struct HarbolLinkMap *urhay_setup_func_params(struct UrhayInterp *const interp, 
 		struct UrhayNode *const varnode = iter->KvPairPtr->Data.Ptr;
 		struct UrhayVar *var = calloc(1, sizeof *var);
 		var->Scope = 0;
-		var->I64 = urhay_walk(interp, varnode->Value, params, localvars, 0, NULL);
+		urhay_walk(interp, varnode->Value, params, localvars, 0, NULL, &var->Var);
 		harbol_linkmap_insert(param_args, varnode->Varname.CStr, (union HarbolValue){ .Ptr=var });
 	}
 	return param_args;
@@ -554,8 +849,9 @@ bool urhay_interpret(struct UrhayInterp *const interp)
 		harbol_linkmap_insert(&interp->SymTable, func->FuncName.CStr, (union HarbolValue){ .Ptr=func });
 	}
 	
-	const int64_t result = urhay_walk(interp, interp->ModuleNode, NULL, NULL, 0, NULL);
-	printf("final result == %" PRIi64 "\n", result);
+	struct HarbolVariant result = {0};
+	urhay_walk(interp, interp->ModuleNode, NULL, NULL, 0, NULL, &result);
+	printf("final result == %" PRIi64 "\n", result.Val.Int64);
 	//fclose(g_debug_print), g_debug_print=NULL;
-	return (bool)result;
+	return result.Val.Bool;
 }

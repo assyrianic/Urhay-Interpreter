@@ -140,7 +140,7 @@ enum UrhayToken urhay_lexer_get_token(struct UrhayInterp *const lexer)
 					}
 					lexer->CurrToken = TokenIntLiteral;
 					return TokenIntLiteral;
-				}*/ /*else if( *lexer->Iter=='.' ) { // found a float!
+				}*/ else if( *lexer->Iter=='.' ) { // found a float!
 					harbol_string_add_char(lexeme, *lexer->Iter++);
 					// TODO: error recover bad floating point
 					while( *lexer->Iter && isalnum(*lexer->Iter) ) {
@@ -152,7 +152,7 @@ enum UrhayToken urhay_lexer_get_token(struct UrhayInterp *const lexer)
 					}
 					lexer->CurrToken = TokenFloatLiteral;
 					return TokenFloatLiteral;
-				}*/ else {
+				} else {
 					/* TODO: error recover bad octal */
 					while( *lexer->Iter && isalnum(*lexer->Iter) ) {
 						const rune x = *lexer->Iter++;
@@ -165,30 +165,29 @@ enum UrhayToken urhay_lexer_get_token(struct UrhayInterp *const lexer)
 					return TokenIntLiteral;
 				}
 			} else { /* is regular decimal or float. */
-				//bool is_float = false;
-				while( *lexer->Iter && isalnum(*lexer->Iter) ) {
+				bool is_float = false;
+				harbol_string_add_char(lexeme, *lexer->Iter++);
+				while( *lexer->Iter && (isalnum(*lexer->Iter) || *lexer->Iter=='.') ) {
 					const rune x = *lexer->Iter++;
-					/*if( x=='.' ) {
+					if( x=='.' ) {
 						harbol_string_add_char(lexeme, x);
 						is_float=true;
 						continue;
-					} else*/ if( !is_decimal(x) ) {
-						/*if( is_float && (x=='e' || x=='E') ) {
+					} else if( !is_decimal(x) ) {
+						if( is_float && (x=='e' || x=='E') ) {
 							harbol_string_add_char(lexeme, x);
 							continue;
-						} else {*/
+						} else {
 							// throw error here.
-						//}
+						}
 					}
 					harbol_string_add_char(lexeme, x);
 				}
-				//lexer->CurrToken = is_float ? TokenFloatLiteral : TokenIntLiteral;
-				//return is_float ? TokenFloatLiteral : TokenIntLiteral;
-				lexer->CurrToken = TokenIntLiteral;
-				return TokenIntLiteral;
+				lexer->CurrToken = is_float ? TokenFloatLiteral : TokenIntLiteral;
+				return is_float ? TokenFloatLiteral : TokenIntLiteral;
 			}
 		}
-		/*else if( *lexer->Iter=='.' && is_decimal(lexer->Iter[1]) ) {
+		else if( *lexer->Iter=='.' && is_decimal(lexer->Iter[1]) ) {
 			harbol_string_add_char(lexeme, *lexer->Iter++);
 			while( *lexer->Iter && isalnum(*lexer->Iter) ) {
 				const rune x = *lexer->Iter++;
@@ -205,7 +204,6 @@ enum UrhayToken urhay_lexer_get_token(struct UrhayInterp *const lexer)
 			lexer->CurrToken = TokenFloatLiteral;
 			return TokenFloatLiteral;
 		}
-		*/
 		/* lex words! */
 		else if( is_alphabetic(*lexer->Iter) ) {
 			while( is_possible_ident(*lexer->Iter) )
@@ -226,6 +224,9 @@ enum UrhayToken urhay_lexer_get_token(struct UrhayInterp *const lexer)
 			} else if( !harbol_string_cmpcstr(lexeme, "var") ) {
 				lexer->CurrToken = TokenVar;
 				return TokenVar;
+			} else if( !harbol_string_cmpcstr(lexeme, "null") ) {
+				lexer->CurrToken = TokenNull;
+				return TokenNull;
 			} else {
 				lexer->CurrToken = TokenIdentifier;
 				return TokenIdentifier;

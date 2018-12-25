@@ -12,7 +12,7 @@ void urhay_err_out(struct UrhayInterp *const restrict interp, const char err[res
 	vprintf(err, args);
 	printf(" **** on line %zu\n", interp->Line);
 	va_end(args);
-	exit(1);
+	exit(-1);
 }
 
 static const char *_token_to_cstr(const enum UrhayToken token)
@@ -21,7 +21,7 @@ static const char *_token_to_cstr(const enum UrhayToken token)
 		case TokenInvalid: return "invalid token";
 		case TokenIdentifier: return "identifier";
 		case TokenIntLiteral: return "decimal literal";
-		//case TokenFloatLiteral: return "float literal";
+		case TokenFloatLiteral: return "float literal";
 		//case TokenStringLiteral: return "string literal";
 		//case TokenCharLiteral: return "char literal";
 		case TokenIf: return "if";
@@ -116,7 +116,7 @@ struct UrhayNode *urhay_parse_module(struct UrhayInterp *const lexer)
 	urhay_lexer_get_token(lexer);
 	while( lexer->CurrToken != TokenInvalid ) {
 		struct UrhayNode *func = urhay_parse_function(lexer);
-		urhay_ast_print(func);
+		//urhay_ast_print(func);
 		const bool exists = harbol_linkmap_has_key(node->Module, func->FuncName.CStr);
 		
 		/* if our function doesn't exist in the symbol table, put it in regardless if func's body is defined. */
@@ -215,7 +215,7 @@ struct UrhayNode *urhay_parse_statement(struct UrhayInterp *const lexer)
 	}
 }
 
-// if_stmt = 'if' '(' <expr> ')' <statement> ;
+// if_stmt = 'if' <expr> <statement> ;
 struct UrhayNode *urhay_parse_if_stmt(struct UrhayInterp *const lexer)
 {
 	if( !lexer )
@@ -227,8 +227,8 @@ struct UrhayNode *urhay_parse_if_stmt(struct UrhayInterp *const lexer)
 	urhay_lexer_get_token(lexer);
 	
 	// make sure we have ( and advance lexer
-	_parse_expect(lexer, TokenLeftParen);
-	urhay_lexer_get_token(lexer);
+	//_parse_expect(lexer, TokenLeftParen);
+	//urhay_lexer_get_token(lexer);
 	
 	struct UrhayNode *node = calloc(1, sizeof *node);
 	node->NodeTag = ASTIfStmt;
@@ -236,8 +236,8 @@ struct UrhayNode *urhay_parse_if_stmt(struct UrhayInterp *const lexer)
 	node->Cond = urhay_parse_comma_expr(lexer);
 	
 	// make sure we have ) and advance lexer
-	_parse_expect(lexer, TokenRightParen);
-	urhay_lexer_get_token(lexer);
+	//_parse_expect(lexer, TokenRightParen);
+	//urhay_lexer_get_token(lexer);
 	
 	node->Then = urhay_parse_statement(lexer);
 	if( *token==TokenElse ) {
@@ -247,7 +247,7 @@ struct UrhayNode *urhay_parse_if_stmt(struct UrhayInterp *const lexer)
 	return node;
 }
 
-// iter_stmt = 'for' '(' <expr> ')' <statement> ;
+// iter_stmt = 'for' <expr> <statement> ;
 struct UrhayNode *urhay_parse_iter_stmt(struct UrhayInterp *const lexer)
 {
 	if( !lexer )
@@ -259,8 +259,8 @@ struct UrhayNode *urhay_parse_iter_stmt(struct UrhayInterp *const lexer)
 	urhay_lexer_get_token(lexer);
 	
 	// make sure we have ( and advance lexer
-	_parse_expect(lexer, TokenLeftParen);
-	urhay_lexer_get_token(lexer);
+	//_parse_expect(lexer, TokenLeftParen);
+	//urhay_lexer_get_token(lexer);
 	
 	struct UrhayNode *node = calloc(1, sizeof *node);
 	node->NodeTag = ASTForLoop;
@@ -268,8 +268,8 @@ struct UrhayNode *urhay_parse_iter_stmt(struct UrhayInterp *const lexer)
 	node->ForCond = urhay_parse_comma_expr(lexer);
 	
 	// make sure we have ) and advance lexer
-	_parse_expect(lexer, TokenRightParen);
-	urhay_lexer_get_token(lexer);
+	//_parse_expect(lexer, TokenRightParen);
+	//urhay_lexer_get_token(lexer);
 	
 	node->LoopStmt = urhay_parse_statement(lexer);
 	return node;
@@ -340,6 +340,7 @@ struct UrhayNode *urhay_parse_var_assign(struct UrhayInterp *const lexer)
 	struct UrhayNode *node = calloc(1, sizeof *node);
 	node->NodeTag = ASTVarInit;
 	
+	_parse_expect(lexer, TokenIdentifier);
 	harbol_string_copy_str(&node->Varname, &lexer->Lexeme);
 	urhay_lexer_get_token(lexer);
 	
@@ -787,7 +788,22 @@ struct UrhayNode *urhay_parse_primary_expr(struct UrhayInterp *const lexer)
 	} else if( *token==TokenIntLiteral ) {
 		struct UrhayNode *const node = calloc(1, sizeof *node);
 		node->NodeTag = ASTIntLit;
-		node->I64Lit = strtoll(lexer->Lexeme.CStr, NULL, 0);
+		node->LitVal.Val.Int64 = strtoll(lexer->Lexeme.CStr, NULL, 0);
+		node->LitVal.TypeTag = TypeInt;
+		urhay_lexer_get_token(lexer);
+		return node;
+	} else if( *token==TokenFloatLiteral ) {
+		struct UrhayNode *const node = calloc(1, sizeof *node);
+		node->NodeTag = ASTFloatLit;
+		node->LitVal.Val.Double = strtod(lexer->Lexeme.CStr, NULL);
+		node->LitVal.TypeTag = TypeFloat;
+		urhay_lexer_get_token(lexer);
+		return node;
+	} else if( *token==TokenNull ) {
+		struct UrhayNode *const node = calloc(1, sizeof *node);
+		node->NodeTag = ASTIntLit;
+		node->LitVal.Val.Int64 = 0;
+		node->LitVal.TypeTag = TypePtr;
 		urhay_lexer_get_token(lexer);
 		return node;
 	} else if( *token==TokenLeftParen ) {
