@@ -1,5 +1,5 @@
 # Urhay Interpreter
-a small, educational AST interpreter that implements a dynamically typed, C-like language.
+a small, educational AST interpreter that implements a dynamically-typed, C-like language.
 
 ## Example Code:
 ```javascript
